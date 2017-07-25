@@ -24,6 +24,14 @@ use Google\AdsApi\Dfp\DfpSession;
 use Google\AdsApi\Dfp\DfpSessionBuilder;
 use Google\AdsApi\Dfp\Util\v201705\StatementBuilder;
 use Google\AdsApi\Dfp\v201705\LineItemService;
+use Google\AdsApi\Dfp\v201705\StartDateTimeType;
+use Google\AdsApi\Dfp\v201705\CreativeService;
+use Google\AdsApi\Dfp\v201705\LineItemCreativeAssociation;
+use Google\AdsApi\Dfp\v201705\LineItemCreativeAssociationService;
+use Google\AdsApi\Dfp\v201705\Money;
+use Google\AdsApi\Dfp\v201705\CostType;
+use Google\AdsApi\Dfp\v201705\CustomTargetingService;
+
 
 /**
  * This example gets all line items.
@@ -36,66 +44,52 @@ class GetAllLineItems {
 
   public static function runExample(DfpServices $dfpServices,
       DfpSession $session) {
-    $lineItemService =
-        $dfpServices->get($session, LineItemService::class);
 
-    // Create a statement to select line items.
+    $orderId = '2110342997';
+    $hb_pb_key_id = 473282;
+
+    $lineItemService = $dfpServices->get($session, LineItemService::class);
+    $customTargetingService =
+        $dfpServices->get($session, CustomTargetingService::class);
+
     $statementBuilder = (new StatementBuilder())
-        ->Where('lineItemId = :lineItemId')
-        ->WithBindVariableValue('lineItemId', '4366027857');
+        ->where('customTargetingKeyId = :customTargetingKeyId');
+    $statementBuilder->withBindVariableValue(
+        'customTargetingKeyId', $hb_pb_key_id);
+    $page = $customTargetingService->getCustomTargetingValuesByStatement(
+        $statementBuilder->toStatement());
+
+    $rateToId = array();
+
+    foreach ($page->getResults() as $customTargetingValue) {
+      $rateToId[$customTargetingValue->getName()] = $customTargetingValue->getId();
+    }
+
+    $statementBuilder = (new StatementBuilder())
+        ->Where('orderId = :orderId')
+        ->WithBindVariableValue('orderId', $orderId);
 
     $page = $lineItemService->getLineItemsByStatement(
         $statementBuilder->ToStatement());
 
-    $lineItems = array();
-
-    $lineItemToCopy = $page->getResults()[0];
+    $lineItemsToUpdate = array();
 
     foreach ($page->getResults() as $lineItem) {
-        
-      print_r($lineItem);
+      $rate = explode('_', $lineItem->getName())[2];
+      $lineItem->setCostPerUnit(new Money('USD', $rate * 1000000));
 
-      if ($lineItem->getIsArchived() == false) {
+      $newCustomTargetingKeyId = $rateToId[$rate];
 
+      $lineItem->getTargeting()->getCustomTargeting()->getChildren()[0]->getChildren()[0]->setValueIds([$newCustomTargetingKeyId]);
 
-        // $lineItem->targeting->customTargeting->children = array($lineItem->targeting->customTargeting->children[0], $customCriteria1);
-        // $lineItem->targeting->customTargeting->logicalOperator = 'AND';
-
-        // printf("current amount: %d \n", $lineItem->getCostPerUnit()->getMicroAmount());
-
-        // $current_amount = $lineItem->getCostPerUnit()->getMicroAmount();
-        // $new_amount = $current_amount * 3;
-
-        // $lineItem->getValueCostPerUnit()->setMicroAmount($new_amount);
-
-        // printf("new amount: %d \n", $new_amount);
-
-        // $hb_pb = $lineItem->getTargeting()->getCustomTargeting()->getChildren()[0]->getChildren()[0];
-        // var_dump($hb_pb);
-
-        // $lineItem->getTargeting()->getCustomTargeting()->setChildren(array($hb_pb));
-
-        // $customTargeting = $lineItem->getTargeting()->getCustomTargeting();
-        // var_dump($customTargeting);
-
-        // echo("\n");
-
-        $lineItem 
-
-        array_push($lineItems, $lineItem);
-      }
+      array_push($lineItemsToUpdate, $lineItem);
     }
 
-    $lineItemService->createLineItems($lineItems);
+    $updatedLineItems = $lineItemService->updateLineItems($lineItemsToUpdate);
 
-    foreach ($lineItems as $createdLineItem) {
-      printf("Line item with ID %d, name '%s' was updated.\n", $createdLineItem->getId(), $createdLineItem->getName());
+    foreach ($updatedLineItems as $updatedLineItem) {
+      printf("Line item with name '%s' was updated.\n", $updatedLineItem->getName());
     }
-
-    // foreach ($lineItems as $updatedLineItem) {
-    //   printf("Line item with ID %d, name '%s' was updated.\n",
-    //       $updatedLineItem->getId(), $updatedLineItem->getName());
-    // }
   }
 
   public static function main() {
