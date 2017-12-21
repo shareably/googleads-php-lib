@@ -45,7 +45,7 @@ class GetAllLineItems {
   public static function runExample(DfpServices $dfpServices,
       DfpSession $session) {
 
-    $orderId = '457787282';
+    $orderId = '457797122';
     $hb_pb_key_id = 11085518;
 
     $lineItemService = $dfpServices->get($session, LineItemService::class);
@@ -80,13 +80,15 @@ class GetAllLineItems {
       //$newCustomTargetingKeyId = $rateToId[$rate];
       //$lineItem->getTargeting()->getCustomTargeting()->getChildren()[0]->getChildren()[0]->setValueIds(447894808318);
 
-      $oldCustomCriteria = clone $lineItem->getTargeting()->getCustomTargeting()->getChildren()[0]->getChildren()[0];
-      $newCustomCriteria = clone $lineItem->getTargeting()->getCustomTargeting()->getChildren()[0]->getChildren()[0];
-      $newCustomCriteria->setKeyId(11085518);
-      $newCustomCriteria->setValueIds([447894808318]);
-      $newCustomCriteria->setOperator('IS_NOT');
-      $lineItem->getTargeting()->getCustomTargeting()->getChildren()[0]->setChildren([$oldCustomCriteria, $newCustomCriteria]);
-      array_push($lineItemsToUpdate, $lineItem);
+      if (!$lineItem->getIsArchived()) {
+        $oldCustomCriteria = clone $lineItem->getTargeting()->getCustomTargeting()->getChildren()[0]->getChildren()[0];
+        $newCustomCriteria = clone $lineItem->getTargeting()->getCustomTargeting()->getChildren()[0]->getChildren()[0];
+        $newCustomCriteria->setKeyId(11085518);
+        $newCustomCriteria->setValueIds([447894808318]);
+        $newCustomCriteria->setOperator('IS_NOT');
+        $lineItem->getTargeting()->getCustomTargeting()->getChildren()[0]->setChildren([$oldCustomCriteria, $newCustomCriteria]);
+        array_push($lineItemsToUpdate, $lineItem);
+      }
     }
     $updatedLineItems = $lineItemService->updateLineItems($lineItemsToUpdate);
 
