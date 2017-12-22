@@ -29,6 +29,7 @@ use Google\AdsApi\Dfp\v201705\CreativeService;
 use Google\AdsApi\Dfp\v201705\LineItemCreativeAssociation;
 use Google\AdsApi\Dfp\v201705\LineItemCreativeAssociationService;
 use Google\AdsApi\Dfp\v201705\Money;
+use Google\AdsApi\Dfp\v201705\Size;
 use Google\AdsApi\Dfp\v201705\CostType;
 use Google\AdsApi\Dfp\v201705\CustomTargetingService;
 
@@ -45,12 +46,24 @@ class GetAllLineItems {
   public static function runExample(DfpServices $dfpServices,
       DfpSession $session) {
 
-    $orderId = '2110342997';
+    $orderId = '2211097857';
     $hb_pb_key_id = 473282;
+
+    $creativeIdsToCopy = [
+      '138220878803',
+      '138220878836',
+      '138220878848',
+      '138220878860',
+      '138220869922',
+      '138220878851',
+      '138220878863',
+      '138220878866'
+    ];
 
     $lineItemService = $dfpServices->get($session, LineItemService::class);
     $customTargetingService =
         $dfpServices->get($session, CustomTargetingService::class);
+    $licaService = $dfpServices->get($session, LineItemCreativeAssociationService::class);
 
     $statementBuilder = (new StatementBuilder())
         ->where('customTargetingKeyId = :customTargetingKeyId');
@@ -73,23 +86,65 @@ class GetAllLineItems {
         $statementBuilder->ToStatement());
 
     $lineItemsToUpdate = array();
-
     foreach ($page->getResults() as $lineItem) {
+
       $rate = explode('_', $lineItem->getName())[2];
       $lineItem->setCostPerUnit(new Money('USD', $rate * 1000000));
-
       $newCustomTargetingKeyId = $rateToId[$rate];
 
-      $lineItem->getTargeting()->getCustomTargeting()->getChildren()[0]->getChildren()[0]->setValueIds([$newCustomTargetingKeyId]);
+      foreach($lineItem->getTargeting()->getCustomTargeting()->getChildren()[0]->getChildren() as $child) {
+        if ($child->getKeyId() == $hb_pb_key_id) {
+          $child->setValueIds([$newCustomTargetingKeyId]);
+        }
+      }
+      $lineItem->setName(str_replace('video', 'display', $lineItem->getName()));
 
-      array_push($lineItemsToUpdate, $lineItem);
+      $licaStatementBuilder = (new StatementBuilder())
+          ->where('lineItemId = :lineItemId');
+      $licaStatementBuilder->withBindVariableValue(
+          'lineItemId', $lineItem->getId());
+      $licaResults = $licaService->getLineItemCreativeAssociationsByStatement(
+          $licaStatementBuilder->toStatement());
+
+      if (count($licaResults->getResults()) == 0) {
+        $licas = array();
+        foreach ($creativeIdsToCopy as $creativeIdToCopy) {
+          $lica = new LineItemCreativeAssociation();
+          $lica->setCreativeId($creativeIdToCopy);
+          $lica->setLineItemId($lineItem->getId());
+          $lica->setSizes([
+            new Size(300, 100, false),
+            new Size(300, 250, false),
+            new Size(300, 600, false),
+            new Size(320, 50, false),
+            new Size(336, 280, false),
+            new Size(728, 90, false),
+            new Size(970, 90, false),
+          ]);
+          array_push($licas, $lica);
+        }
+        
+        $results = $licaService->createLineItemCreativeAssociations($licas);
+        foreach ($results as $i => $lica) {
+          printf(
+              "%d) LICA with line item ID %d, creative ID %d, and status '%s' was "
+                  . "created.\n",
+              $i,
+              $lica->getLineItemId(),
+              $lica->getCreativeId(),
+              $lica->getStatus()
+          );
+        }
+      }
+
+      //array_push($lineItemsToUpdate, $lineItem);
     }
 
-    $updatedLineItems = $lineItemService->updateLineItems($lineItemsToUpdate);
+    // $updatedLineItems = $lineItemService->updateLineItems($lineItemsToUpdate);
 
-    foreach ($updatedLineItems as $updatedLineItem) {
-      printf("Line item with name '%s' was updated.\n", $updatedLineItem->getName());
-    }
+    // foreach ($updatedLineItems as $updatedLineItem) {
+    //   printf("Line item with name '%s' was updated.\n", $updatedLineItem->getName());
+    // }
   }
 
   public static function main() {

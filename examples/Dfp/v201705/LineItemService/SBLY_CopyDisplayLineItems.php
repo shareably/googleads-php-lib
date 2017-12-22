@@ -32,6 +32,7 @@ use Google\AdsApi\Dfp\v201705\Money;
 use Google\AdsApi\Dfp\v201705\Size;
 use Google\AdsApi\Dfp\v201705\CostType;
 use Google\AdsApi\Dfp\v201705\CustomTargetingService;
+use Google\AdsApi\Dfp\v201705\CustomCriteria;
 
 
 /**
@@ -47,18 +48,18 @@ class GetAllLineItems {
       DfpSession $session) {
 
     $creativeIdsToCopy = [
-      '138220827799',
-      '138220828903',
-      '138220841597',
-      '138220828912',
-      '138220868514',
-      '138220828822',
-      '138220826488',
-      '138220841654'
+      '138220870795',
+      '138220908189',
+      '138220908216',
+      '138220908225',
+      '138220908219',
+      '138220908228',
+      '138220908234',
+      '138220908237'
     ];
-    $lineItemIdToCopy = '4528509744';
-    $startingRate = 0.05;
-    $endingRate = 4.49;
+    $lineItemIdToCopy = '4528813149';
+    $startingRate = 20.00;
+    $endingRate = 20.00;
     $hb_pb_key_id = 473282;
 
     $lineItemService = $dfpServices->get($session, LineItemService::class);
@@ -83,7 +84,7 @@ class GetAllLineItems {
       print_r(sprintf('%.2f', $x));
 
       $newLineItem = clone $lineItemToCopy;
-      $newLineItem->setName(sprintf('pb_video_%.2f', $x));
+      $newLineItem->setName(sprintf('pb_display_%.2f', $x));
       $newLineItem->setStartDateTimeType(StartDateTimeType::IMMEDIATELY);
       $newLineItem->setCostType(CostType::CPM);
       $newLineItem->setCostPerUnit(new Money('USD', $x * 1000000));
@@ -94,19 +95,30 @@ class GetAllLineItems {
           'name', sprintf('%.2f', $x));
       $statementBuilder->withBindVariableValue(
           'customTargetingKeyId', $hb_pb_key_id);
-      $page = $customTargetingService->getCustomTargetingValuesByStatement(
+      $resultsPage = $customTargetingService->getCustomTargetingValuesByStatement(
           $statementBuilder->toStatement());
-      $newCustomTargetingKeyId = $page->getResults()[0]->getId();
+      $newCustomTargetingKeyId = $resultsPage->getResults()[0]->getId();
 
-      $newLineItem->getTargeting()->getCustomTargeting()->getChildren()[0]->getChildren()[0]->setValueIds([$newCustomTargetingKeyId]);
+      // this is broken... value id always goes to last one in loop
+      $newChildren = array();
+      foreach($newLineItem->getTargeting()->getCustomTargeting()->getChildren()[0]->getChildren() as $child) {
+        if ($child->getKeyId() == $hb_pb_key_id) {
+          $newCustomCriteria = new CustomCriteria();
+          $newCustomCriteria->setKeyId($hb_pb_key_id);
+          $newCustomCriteria->setValueIds([$newCustomTargetingKeyId]);
+          $newCustomCriteria->setOperator('IS');
+          array_push($newChildren, $newCustomCriteria);
+        } else {
+          array_push($newChildren, $child);
+        }
+      }
+      $newLineItem->getTargeting()->getCustomTargeting()->getChildren()[0]->setChildren($newChildren);
 
       array_push($lineItems, $newLineItem);
     }
-
     $createdLineItems = $lineItemService->createLineItems($lineItems);
     $licas = array();
 
-    var_dump($createdLineItems);
     foreach ($createdLineItems as $createdLineItem) {
       printf("Line item with name '%s' was created.\n", $createdLineItem->getName());
 
